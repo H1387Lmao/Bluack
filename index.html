@@ -1,141 +1,121 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Blockly Lua Mobile</title>
-
+  <meta charset="UTF-8">
+  <title>Bluack Blockly Editor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://unpkg.com/blockly/blockly.min.js"></script>
-  <script src="https://unpkg.com/blockly/lua.min.js"></script>
-
+  <script src="https://unpkg.com/blockly/lua_compressed.js"></script>
   <style>
     html, body {
       margin: 0;
-      padding: 0;
-      height: 100vh;
-      font-family: sans-serif;
+      height: 100%;
       display: flex;
       flex-direction: column;
     }
-
     #blocklyDiv {
-      height: 60vh;
+      flex: 8;
       width: 100%;
-      touch-action: none;
     }
-
     #controls {
-      padding: 10px;
-      background: #f0f0f0;
+      flex: 2;
+      width: 100%;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    #output {
-      flex: 1;
-      background: #eee;
-      padding: 10px;
-      overflow-x: auto;
-      white-space: pre-wrap;
+      flex-direction: column;
+      background: #111;
+      color: #0f0;
       font-family: monospace;
     }
-
+    #output {
+      flex: 1;
+      overflow: auto;
+      white-space: pre-wrap;
+      background: #222;
+      padding: 10px;
+    }
+    #buttons {
+      display: flex;
+      flex-wrap: wrap;
+      padding: 5px;
+    }
     button {
-      font-size: 1rem;
+      margin: 5px;
       padding: 6px 12px;
     }
   </style>
 </head>
 <body>
+  <div id="blocklyDiv"></div>
   <div id="controls">
-    <button id="generate">Generate Lua</button>
+    <div id="buttons">
+      <button onclick="generateLua()">Generate Lua</button>
+    </div>
+    <pre id="output">-- Lua code will appear here --</pre>
+    <pre id="console"></pre>
   </div>
 
-  <div id="blocklyDiv"></div>
-
-  <pre id="output">← Lua code will show here</pre>
-
   <xml id="toolbox" style="display: none">
-    <category name="Scope" colour="#696969"></block>
-    </category>
+    <category name="Variables" colour="#A65C81" custom="VARIABLE"></category>
     <category name="Text" colour="#5CA65C">
-      <block type="text_print">
-        <value name="TEXT">
-          <block type="text">
-            <field name="TEXT">Hello</field>
-          </block>
-        </value>
-      </block>
       <block type="text"></block>
+      <block type="text_print"></block>
+    </category>
+    <category name="Math" colour="#5C68A6">
+      <block type="math_number"></block>
+      <block type="math_arithmetic"></block>
     </category>
   </xml>
 
   <script>
+    const workspace = Blockly.inject('blocklyDiv', {
+      toolbox: document.getElementById('toolbox'),
+      scrollbars: true,
+      pinch: true,
+      trashcan: true
+    });
+
     Blockly.defineBlocksWithJsonArray([
       {
         "type": "start_block",
         "message0": "START",
-        "nextStatement": null,
+        "message1": "%1",  // This makes room for the input connection
+        "args1": [
+          {
+            "type": "input_statement",
+            "name": "BODY"  // Give it a name!
+          }
+        ],
         "colour": 0,
-        "tooltip": "Program starts here",
-        "helpUrl": "",
+        "tooltip": "Program entry point",
+        "helpUrl": ""
       }
     ]);
 
-    const workspace = Blockly.inject('blocklyDiv', {
-      toolbox: document.getElementById('toolbox'),
-      scrollbars: true,
-      zoom: {
-        controls: true,
-        wheel: true,
-        startScale: 1,
-        maxScale: 2,
-        minScale: 0.3,
-        scaleSpeed: 1.2
-      }
-    });
-
-    workspace.addChangeListener(() => {
-      const hasStart = workspace.getAllBlocks().some(b => b.type === "start_block");
-      if (hasStart) {
-        workspace.updateToolbox(toolboxWithoutStart);
-      } else {
-        workspace.updateToolbox(toolboxWithStart);
-      }
-    });
+    Blockly.Lua.forBlock['start_block'] = function(block) {
+      const next = Blockly.Lua.statementToCode(block, 'BODY') || "";
+      return next;
+    };
     
+    
+    // Create START block on workspace load
+    const startBlock = workspace.newBlock('start_block');
+    startBlock.setDeletable(false);
+    startBlock.initSvg();
+    startBlock.render();
 
-    function generateLuaCode(ws) {
-      let code = "";
-      const blocks = ws.getTopBlocks(true);
-      const startBlock = blocks.find(b => b.type === "start_block");
-      if (!startBlock) return "-- Error: No START block found.";
-
-      let current = startBlock.getNextBlock();
-      while (current) {
-        if (current.type === "text_print") {
-          const inputBlock = current.getInputTargetBlock("TEXT");
-          const value = inputBlock?.getField("TEXT")?.getValue() || "";
-          code += `print("${value}")\n`;
-        }
-        current = current.getNextBlock();
+    function generateLua() {
+      try {
+        Blockly.Lua.init(workspace);
+        const code = Blockly.Lua.blockToCode(startBlock);
+        document.getElementById('output').textContent = code;
+      } catch (e) {
+        document.getElementById('console').textContent = 'Error: ' + e.message;
       }
-
-      return code.trim();
     }
 
-    document.getElementById("generate").onclick = function () {
-      const lua = generateLuaCode(workspace);
-      document.getElementById("output").innerHTML = lua || "No code generated.";
+    window.onerror = function(msg, url, line, col, error) {
+      document.getElementById('console').textContent = 'JS Error: ' + msg + ' at line ' + line;
     };
-
-    // Optionally auto-insert START block
-    const start = workspace.newBlock('start_block');
-    start.initSvg();
-    start.render();
-    start.moveBy(20, 20);
-    start.setDeletable(false);
   </script>
 </body>
 </html>
