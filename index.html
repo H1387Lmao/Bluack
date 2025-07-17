@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blockly Lua Mobile</title>
+
+  <script src="https://unpkg.com/blockly/blockly.min.js"></script>
+  <script src="https://unpkg.com/blockly/lua.min.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #blocklyDiv {
+      height: 60vh;
+      width: 100%;
+      touch-action: none;
+    }
+
+    #controls {
+      padding: 10px;
+      background: #f0f0f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #output {
+      flex: 1;
+      background: #eee;
+      padding: 10px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      font-family: monospace;
+    }
+
+    button {
+      font-size: 1rem;
+      padding: 6px 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <button id="generate">Generate Lua</button>
+  </div>
+
+  <div id="blocklyDiv"></div>
+
+  <pre id="output">← Lua code will show here</pre>
+
+  <xml id="toolbox" style="display: none">
+    <category name="Scope" colour="#696969"></block>
+    </category>
+    <category name="Text" colour="#5CA65C">
+      <block type="text_print">
+        <value name="TEXT">
+          <block type="text">
+            <field name="TEXT">Hello</field>
+          </block>
+        </value>
+      </block>
+      <block type="text"></block>
+    </category>
+  </xml>
+
+  <script>
+    Blockly.defineBlocksWithJsonArray([
+      {
+        "type": "start_block",
+        "message0": "START",
+        "nextStatement": null,
+        "colour": 0,
+        "tooltip": "Program starts here",
+        "helpUrl": "",
+      }
+    ]);
+
+    const workspace = Blockly.inject('blocklyDiv', {
+      toolbox: document.getElementById('toolbox'),
+      scrollbars: true,
+      zoom: {
+        controls: true,
+        wheel: true,
+        startScale: 1,
+        maxScale: 2,
+        minScale: 0.3,
+        scaleSpeed: 1.2
+      }
+    });
+
+    workspace.addChangeListener(() => {
+      const hasStart = workspace.getAllBlocks().some(b => b.type === "start_block");
+      if (hasStart) {
+        workspace.updateToolbox(toolboxWithoutStart);
+      } else {
+        workspace.updateToolbox(toolboxWithStart);
+      }
+    });
+    
+
+    function generateLuaCode(ws) {
+      let code = "";
+      const blocks = ws.getTopBlocks(true);
+      const startBlock = blocks.find(b => b.type === "start_block");
+      if (!startBlock) return "-- Error: No START block found.";
+
+      let current = startBlock.getNextBlock();
+      while (current) {
+        if (current.type === "text_print") {
+          const inputBlock = current.getInputTargetBlock("TEXT");
+          const value = inputBlock?.getField("TEXT")?.getValue() || "";
+          code += `print("${value}")\n`;
+        }
+        current = current.getNextBlock();
+      }
+
+      return code.trim();
+    }
+
+    document.getElementById("generate").onclick = function () {
+      const lua = generateLuaCode(workspace);
+      document.getElementById("output").innerHTML = lua || "No code generated.";
+    };
+
+    // Optionally auto-insert START block
+    const start = workspace.newBlock('start_block');
+    start.initSvg();
+    start.render();
+    start.moveBy(20, 20);
+    start.setDeletable(false);
+  </script>
+</body>
+</html>
