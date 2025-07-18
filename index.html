@@ -9,130 +9,59 @@
   <!-- Added Blockly English message file for Blockly.Msg definitions -->
   <script src="https://unpkg.com/blockly/msg/en.js"></script>
   <style>
-    /* Ensure consistent box model */
     html, body {
-      box-sizing: border-box;
-    }
-    *, *::before, *::after {
-      box-sizing: inherit;
-    }
-
-    body {
       margin: 0;
-      height: 100vh; /* Full viewport height */
+      height: 100%;
       display: flex;
-      flex-direction: column; /* Stack children vertically */
-      font-family: monospace; /* Apply monospace to the whole body */
-      background-color: #0d0d0d; /* Dark background for the whole page */
-      color: #0f0; /* Green text for the whole page */
+      flex-direction: column;
     }
-
-    /* Main container for Blockly and controls */
-    .main-container {
-      flex-grow: 1; /* Allow this container to take all available vertical space */
-      display: flex;
-      flex-direction: column; /* Stack children (Blockly and controls) vertically within this container */
-      width: 100%;
-    }
-
     #blocklyDiv {
-      flex-grow: 1; /* Allow Blockly div to take all available vertical space */
-      min-height: 400px; /* Ensure a minimum height for the Blockly editor */
+      flex: 8;
       width: 100%;
-      background-color: #1a1a1a; /* Slightly lighter dark for Blockly area */
-      border-bottom: 1px solid #333; /* Separator */
-      color: #1f1f1f;
     }
-
     #controls {
+      flex: 2;
+      width: 100%;
       display: flex;
       flex-direction: column;
       background: #111;
-      padding: 10px;
-      border-top: 1px solid #333; /* Visual separation */
-      flex-shrink: 0; /* Prevent controls from shrinking below content */
-      overflow-y: auto; /* Add scrollbar if content overflows vertically */
-    }
-
-    #output {
-      min-height: 90%; /* Minimum height for output */
-      word-wrap: normal;
-      overflow-x: auto; /* Keep horizontal scroll for long lines */
-      overflow-y: auto; /* Ensure output itself scrolls vertically */
-      background: #222;
+      color: #0f0;
       font-family: monospace;
-      padding: 10px;
-      border-radius: 5px; /* Slightly rounded corners */
-      margin-bottom: 10px; /* Space below output */
-      color: #FFF; /* Changed color to white for better visibility on dark background */
     }
-
+    #output {
+      flex: 1;
+      overflow: auto;
+      white-space: pre-wrap;
+      background: #222;
+      padding: 10px;
+    }
     #buttons {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px; /* Space between buttons */
-      justify-content: center; /* Center buttons horizontally */
-      margin-bottom: 10px; /* Space below buttons */
+      padding: 5px;
     }
-
     button {
-      background-color: #008000; /* Green button */
-      color: white;
-      padding: 8px 16px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-family: monospace;
-      font-size: 1em;
-      transition: background-color 0.2s ease;
+      margin: 5px;
+      padding: 6px 12px;
     }
-
-    button:hover {
-      background-color: #006400; /* Darker green on hover */
-    }
-
-    #console {
-      max-height: 10%; /* Minimum height for console */
+    #console{
+      flex: 1;
       overflow: auto;
       white-space: pre-wrap;
-      color: #ff3333; /* Red for errors */
-      background: #222;
-      padding: 10px;
-      border-radius: 5px;
-    }
-
-    /* Responsive adjustments */
-    @media (min-width: 768px) {
-      .main-container {
-        flex-direction: row; /* Side-by-side on larger screens */
-      }
-      #blocklyDiv {
-        flex: 3; /* Blockly takes more space */
-        min-height: 100%; /* Fill height */
-        border-bottom: none; /* No bottom border when side-by-side */
-        border-right: 1px solid #333; /* Add right border */
-      }
-      #controls {
-        flex: 1; /* Controls take less space */
-        border-top: none; /* No top border when side-by-side */
-        border-left: 1px solid #333; /* Add left border */
-      }
-      #output, #console {
-        margin: 0 0 10px 0; /* Adjust margins for vertical stacking within controls */
-      }
+      color: red;
+      float: bottom;
+      z-index: 2;
     }
   </style>
 </head>
 <body>
-  <div class="main-container">
-    <div id="blocklyDiv"></div>
-    <div id="controls">
-      <div id="buttons">
-        <button onclick="generateLua()">Generate Lua</button>
-      </div>
-      <pre id="output">-- Lua code will appear here --</pre>
-      <pre id="console"></pre>
+  <div id="blocklyDiv"></div>
+  <div id="controls">
+    <div id="buttons">
+      <button onclick="generateLua()">Generate Lua</button>
     </div>
+    <pre id="output">-- Lua code will appear here --</pre>
+    <pre id="console"></pre>
   </div>
 
   <xml id="toolbox" style="display: none">
@@ -162,80 +91,16 @@
     <category name="Procedures" colour="#AACCDD">
       <block type="return"></block>
     </category>
+    <!-- Custom category for Procedures -->
+    <category name="Functions" colour="#6C8EBF" custom="PROCEDURE"></category>
     <category name="Custom Functions" colour="#CC6680">
       <block type="function_definition_block"></block>
-      <block type="function_call"></block> <!-- New function call block -->
-      <block type="function_argument_get"></block> <!-- Re-added function_argument_get -->
+      <block type="function_argument_get"></block>
     </category>
   </xml>
 
   <script>
     let workspace = null;
-
-    // Global registry for custom function definitions (still used by function_definition_block)
-    Blockly.Functions = {
-      definitions: {}, // Stores {functionName: {isExpression: boolean, argumentNames: []}}
-
-      /**
-       * Registers or updates a function definition.
-       * @param {Blockly.Block} block The function definition block.
-       */
-      registerFunction: function(block) {
-        const name = block.getFieldValue('FUNCTION_NAME');
-        if (name) {
-          this.definitions[name] = {
-            isExpression: block.isExpression_,
-            argumentNames: block.argumentNames_ || []
-          };
-          // Toolbox refresh is now explicitly managed by the function_definition_block's onNameChange_
-          // to avoid excessive updates.
-        }
-      },
-
-      /**
-       * Unregisters a function definition.
-       * @param {Blockly.Block} block The function definition block.
-       */
-      unregisterFunction: function(block) {
-        const name = block.getFieldValue('FUNCTION_NAME');
-        if (name && this.definitions[name]) {
-          delete this.definitions[name];
-          // Toolbox refresh is now explicitly managed by the function_definition_block's onNameChange_
-        }
-      },
-
-      /**
-       * Returns a list of all defined function names for dropdowns.
-       * (Still used by function_argument_get, but function_call no longer uses this for dropdown)
-       * @return {!Array<!Array<string>>} Array of options for the dropdown.
-       */
-      getFunctionNames: function() {
-        const options = [['(select function)', '']];
-        for (const name in this.definitions) {
-          options.push([name, name]);
-        }
-        return options;
-      },
-
-      /**
-       * Returns the argument names for a given function.
-       * @param {string} functionName The name of the function.
-       * @return {!Array<string>} Array of argument names.
-       */
-      getFunctionArgs: function(functionName) {
-        return this.definitions[functionName] ? this.definitions[functionName].argumentNames : [];
-      },
-
-      /**
-       * Returns whether a given function is an expression.
-       * @param {string} functionName The name of the function.
-       * @return {boolean} True if the function is an expression, false otherwise.
-       */
-      isFunctionExpression: function(functionName) {
-        return this.definitions[functionName] ? this.definitions[functionName].isExpression : false;
-      }
-    };
-
 
     Blockly.defineBlocksWithJsonArray([
       {
@@ -427,8 +292,7 @@
       init: function() {
         this.appendDummyInput('NAME_INPUT')
             .appendField('function')
-            // Bind onNameChange_ to 'this' (the block instance)
-            .appendField(new Blockly.FieldTextInput('my_function', this.onNameChange_.bind(this)), 'FUNCTION_NAME')
+            .appendField(new Blockly.FieldTextInput('my_function'), 'FUNCTION_NAME')
             .appendField('(')
             .appendField('', 'ARGS_TEXT') // Placeholder for argument names
             .appendField(')');
@@ -450,33 +314,6 @@
 
         // Update the block's shape based on initial state
         this.updateShape_();
-
-        // Register the function when created or loaded
-        Blockly.Functions.registerFunction(this);
-      },
-
-      /**
-       * Callback for when the function name changes.
-       * @param {string} newName The new name of the function.
-       * @private
-       */
-      onNameChange_: function(newName) {
-        // 'this' is now correctly bound to the block instance
-        const oldName = this.getFieldValue('FUNCTION_NAME');
-        if (oldName !== newName) {
-          Blockly.Functions.unregisterFunction(this); // Unregister old name
-          // The field value is already updated by FieldTextInput, no need to set it again here
-          Blockly.Functions.registerFunction(this); // Register new name
-        }
-      },
-
-      /**
-       * Dispose of this block.
-       * @override
-       */
-      dispose: function() {
-        Blockly.Functions.unregisterFunction(this);
-        Blockly.Block.prototype.dispose.call(this);
       },
 
       /**
@@ -509,8 +346,6 @@
           this.argumentNames_.push(xmlElement.getAttribute('arg' + i) || 'arg');
         }
         this.updateShape_();
-        // Re-register the function after loading its state
-        Blockly.Functions.registerFunction(this);
       },
 
       /**
@@ -574,7 +409,6 @@
 
         // Add/update arguments
         this.updateShape_(); // Call updateShape_ to add new arguments and update text
-        Blockly.Functions.registerFunction(this); // Re-register with updated arguments
       },
 
       /**
@@ -605,7 +439,7 @@
       }
     };
 
-    // New block for getting function arguments (re-added)
+    // New block for getting function arguments
     Blockly.Blocks['function_argument_get'] = {
       init: function() {
         this.appendDummyInput()
@@ -644,179 +478,6 @@
     };
 
 
-    // New block for calling a custom function (modified to accept any name and use mutator for args)
-    Blockly.Blocks['function_call'] = {
-      init: function() {
-        this.appendDummyInput()
-            .appendField('call')
-            .appendField(new Blockly.FieldTextInput('my_function_call'), 'FUNCTION_NAME') // Text input for any function name
-            .appendField('(')
-            .appendField('', 'ARGS_TEXT') // Placeholder for argument inputs
-            .appendField(')');
-
-        this.setInputsInline(true);
-        this.setPreviousStatement(true);
-        this.setNextStatement(true);
-        this.setColour('#CC6680'); // Match custom functions category
-        this.setTooltip('Calls a custom defined function.');
-        this.setHelpUrl('');
-
-        this.argumentCount_ = 0; // Number of arguments for this specific call block
-        this.isExpressionCall_ = false; // Whether this call is for an expression function
-
-        // Mutator for arguments and expression toggle
-        // Removed 'function_call_mutator_toggle_expression' as it's not a defined block type
-        this.setMutator(new Blockly.icons.MutatorIcon(['function_call_argument_item'], this));
-
-        this.updateShape_(); // Initial shape update
-      },
-
-      /**
-       * Create XML to represent the selected function and its arguments.
-       * @return {!Element} XML storage element.
-       * @this {Blockly.Block}
-       */
-      mutationToDom: function() {
-        const container = Blockly.utils.xml.createElement('mutation');
-        container.setAttribute('arguments', this.argumentCount_);
-        container.setAttribute('is_expression_call', this.isExpressionCall_);
-        return container;
-      },
-
-      /**
-       * Parse XML to restore the selected function and its arguments.
-       * @param {!Element} xmlElement XML storage element.
-       * @this {Blockly.Block}
-       */
-      domToMutation: function(xmlElement) {
-        this.argumentCount_ = parseInt(xmlElement.getAttribute('arguments'), 10) || 0;
-        this.isExpressionCall_ = (xmlElement.getAttribute('is_expression_call') === 'true');
-        this.updateShape_();
-      },
-
-      /**
-       * Populate the mutator's dialog with this block's components.
-       * @param {!Blockly.Workspace} workspace The workspace to add blocks to.
-       * @return {!Blockly.Block} The container block for the mutator.
-       * @this {Blockly.Block}
-       */
-      decompose: function(workspace) {
-        const containerBlock = workspace.newBlock('function_call_mutator_container');
-        containerBlock.initSvg();
-
-        // Add a checkbox to toggle expression vs. statement call
-        containerBlock.appendDummyInput()
-            .appendField('is expression call?')
-            .appendField(new Blockly.FieldCheckbox(this.isExpressionCall_ ? 'TRUE' : 'FALSE'), 'IS_EXPRESSION_CALL');
-
-        let connection = containerBlock.getInput('STACK').connection;
-        for (let i = 0; i < this.argumentCount_; i++) {
-          const argBlock = workspace.newBlock('function_call_argument_item');
-          argBlock.initSvg();
-          connection.connect(argBlock.previousConnection);
-          connection = argBlock.nextConnection;
-        }
-        return containerBlock;
-      },
-
-      /**
-       * Reconfigure this block based on the mutator's dialog.
-       * @param {!Blockly.Block} containerBlock The container block.
-       * @this {Blockly.Block}
-       */
-      compose: function(containerBlock) {
-        // Update expression call state
-        const newIsExpressionCall = (containerBlock.getFieldValue('IS_EXPRESSION_CALL') === 'TRUE');
-        if (newIsExpressionCall !== this.isExpressionCall_) {
-          this.isExpressionCall_ = newIsExpressionCall;
-          this.updateShape_();
-        }
-
-        // Update arguments
-        const newArgumentCount = containerBlock.getInputTargetBlock('STACK') ?
-            containerBlock.getInputTargetBlock('STACK').getDescendants(false).length : 0;
-
-        // Remove deleted arguments
-        for (let i = this.argumentCount_ - 1; i >= newArgumentCount; i--) {
-          this.removeInput('ARG' + i);
-        }
-        this.argumentCount_ = newArgumentCount;
-
-        // Add/update arguments
-        this.updateShape_();
-      },
-
-      /**
-       * Update the block's shape (inputs/outputs) based on internal state.
-       * @private
-       * @this {Blockly.Block}
-       */
-      updateShape_: function() {
-        // Update output connection based on whether it's an expression call
-        if (this.isExpressionCall_) {
-          if (!this.outputConnection) {
-            this.setOutput(true, null); // Can be any type
-            this.setPreviousStatement(false);
-            this.setNextStatement(false);
-          }
-        } else {
-          if (this.outputConnection) {
-            this.outputConnection.disconnect();
-            this.setOutput(false);
-            this.setPreviousStatement(true);
-            this.setNextStatement(true);
-          }
-        }
-
-        // Remove old argument inputs (if any were removed by mutator)
-        // This loop ensures we only remove inputs that are no longer needed
-        for (let i = this.inputList.length - 1; i >= 0; i--) {
-          const input = this.inputList[i];
-          if (input.name.startsWith('ARG') && parseInt(input.name.substring(3)) >= this.argumentCount_) {
-            this.removeInput(input.name);
-          }
-        }
-
-        // Add new argument inputs
-        for (let i = 0; i < this.argumentCount_; i++) {
-          if (!this.getInput('ARG' + i)) { // Only add if it doesn't exist
-            this.appendValueInput('ARG' + i)
-                .setAlign(Blockly.ALIGN_RIGHT)
-                .appendField('arg' + i + ':'); // Default argument label
-          }
-        }
-
-        // Update the ARGS_TEXT field (the parentheses content)
-        this.getField('ARGS_TEXT').setValue(''); // Clear this as inputs handle arguments
-      }
-    };
-
-    // Mutator container for function_call
-    Blockly.Blocks['function_call_mutator_container'] = {
-      init: function() {
-        this.appendDummyInput()
-            .appendField('arguments');
-        this.appendStatementInput('STACK');
-        this.setColour('#CC6680');
-        this.setTooltip('');
-        this.setHelpUrl('');
-      }
-    };
-
-    // Mutator argument item for function_call
-    Blockly.Blocks['function_call_argument_item'] = {
-      init: function() {
-        this.appendDummyInput()
-            .appendField('argument');
-        this.setPreviousStatement(true);
-        this.setNextStatement(true);
-        this.setColour('#CC6680');
-        this.setTooltip('Add an argument to the function call.');
-        this.setHelpUrl('');
-      }
-    };
-
-
     // --- Lua Generator for Custom Block ---
 
     Blockly.Lua.forBlock['function_definition_block'] = function(block) {
@@ -842,27 +503,6 @@
       }
     };
 
-    // Lua generator for the new function_call block
-    Blockly.Lua.forBlock['function_call'] = function(block) {
-      const functionName = block.getFieldValue('FUNCTION_NAME');
-      const argValues = [];
-      for (let i = 0; i < block.argumentCount_; i++) {
-        const argCode = Blockly.Lua.valueToCode(block, 'ARG' + i, Blockly.Lua.ORDER_NONE) || 'nil';
-        argValues.push(argCode);
-      }
-      const argsString = argValues.join(', ');
-
-      let code = '';
-      if (block.isExpressionCall_) {
-        code = `${functionName}(${argsString})`;
-        return [code, Blockly.Lua.ORDER_HIGH];
-      } else {
-        code = `${functionName}(${argsString})\n`;
-        return code;
-      }
-    };
-
-    // Lua generator for the re-added function_argument_get block
     Blockly.Lua.forBlock['function_argument_get'] = function(block) {
       const argumentName = block.getFieldValue('ARG_NAME');
       return [argumentName, Blockly.Lua.ORDER_ATOMIC];
@@ -900,11 +540,7 @@
     function generateLua() {
       try {
         Blockly.Lua.init(workspace);
-        const raw = Blockly.Lua.workspaceToCode(workspace);
-        const code = raw.split('\n')
-        .map(line => line.trimStart())
-        .filter(line => line.trim() !== '')
-        .join('\n');
+        const code = Blockly.Lua.workspaceToCode(workspace);
         document.getElementById('output').textContent = code;
         document.getElementById('console').textContent = '';
       } catch (e) {
