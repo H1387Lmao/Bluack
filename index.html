@@ -6,6 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://unpkg.com/blockly/blockly.min.js"></script>
   <script src="https://unpkg.com/blockly/lua_compressed.js"></script>
+  <!-- Added Blockly English message file for Blockly.Msg definitions -->
+  <script src="https://unpkg.com/blockly/msg/en.js"></script>
   <style>
     html, body {
       margin: 0;
@@ -42,6 +44,14 @@
       margin: 5px;
       padding: 6px 12px;
     }
+    #console{
+      flex: 1;
+      overflow: auto;
+      white-space: pre-wrap;
+      color: red;
+      float: bottom;
+      z-index: 2;
+    }
   </style>
 </head>
 <body>
@@ -56,37 +66,124 @@
 
   <xml id="toolbox" style="display: none">
     <category name="Variables" colour="#A65C81" custom="VARIABLE"></category>
+    <category name="List" colour="#DFDF32">
+      <block type="lists_create_with">
+        <mutation items="0"></mutation>
+      </block>
+      <block type="lists_setIndex"></block>
+      <block type="lists_getIndex"></block>
+    </category>
     <category name="Text" colour="#5CA65C">
       <block type="text"></block>
       <block type="text_print"></block>
+    </category>
+    <category name="Conversion" colour="#D39CFA">
+      <block type="to_number"></block>
+      <block type="to_string"></block>
     </category>
     <category name="Math" colour="#5C68A6">
       <block type="math_number"></block>
       <block type="math_arithmetic"></block>
     </category>
+    <category name="Strings" colour="#5CA65C">
+      <block type="text_concat"></block>
+    </category>
+    <category name="Procedures" colour="#AACCDD">
+      <block type="return"></block>
+    </category>
+    <!-- Custom category for Procedures -->
+    <category name="Functions" colour="#6C8EBF" custom="PROCEDURE"></category>
+    <category name="Custom Functions" colour="#CC6680">
+      <block type="function_definition_block"></block>
+      <block type="function_argument_get"></block>
+    </category>
   </xml>
 
   <script>
-    const workspace = Blockly.inject('blocklyDiv', {
-      toolbox: document.getElementById('toolbox'),
-      scrollbars: true,
-      pinch: true,
-      trashcan: true
-    });
+    let workspace = null;
 
     Blockly.defineBlocksWithJsonArray([
       {
         "type": "start_block",
         "message0": "START",
-        "message1": "%1",  // This makes room for the input connection
+        "message1": "%1",
         "args1": [
           {
             "type": "input_statement",
-            "name": "BODY"  // Give it a name!
+            "name": "BODY"
           }
         ],
         "colour": 0,
         "tooltip": "Program entry point",
+        "helpUrl": ""
+      },
+      {
+        "type": "to_number",
+        "message0": "%1 %2 a number",
+        "args0": [
+          {
+            "type": "field_label",
+            "text": "make "
+          },
+          {
+            "type": "input_value",
+            "name": "number"
+          }
+        ],
+        "output": null,
+        "colour": 0,
+        "tooltip": "Turns string into a number (IF NUMERICAL)",
+        "helpUrl": ""
+      },
+      {
+        "type": "to_string",
+        "message0": "%1 %2 a string",
+        "args0": [
+          {
+            "type": "field_label",
+            "text": "make "
+          },
+          {
+            "type": "input_value",
+            "name": "number"
+          }
+        ],
+        "output": null,
+        "colour": 0,
+        "tooltip": "Turns anything into a string",
+        "helpUrl": ""
+      },
+      {
+        "type": "text_concat",
+        "message0": "%1 with %2",
+        "args0": [
+          {
+            "type": "input_value",
+            "name": "A"
+          },
+          {
+            "type": "input_value",
+            "name": "B"
+          }
+        ],
+        "inputsInline": true,
+        "output": "String",
+        "colour": 160,
+        "tooltip": "Concatenates two text values",
+        "helpUrl": ""
+      },
+      {
+        "type": "return",
+        "message0": "return %1",
+        "args0":[
+          {
+            "type": "input_value",
+            "name": "A"
+          }
+        ],
+        "previousStatement": null,
+        "colour": 0,
+        "tooltip": "Returns a value from a function",
         "helpUrl": ""
       }
     ]);
@@ -95,26 +192,366 @@
       const next = Blockly.Lua.statementToCode(block, 'BODY') || "";
       return next;
     };
-    
-    
-    // Create START block on workspace load
-    const startBlock = workspace.newBlock('start_block');
-    startBlock.setDeletable(false);
-    startBlock.initSvg();
-    startBlock.render();
+
+    Blockly.Blocks['lists_create_with'].init = function () {
+      this.setHelpUrl(Blockly.Msg.LISTS_CREATE_WITH_HELPURL);
+      this.setStyle('list_blocks');
+      this.itemCount_ = 0;
+      this.updateShape_();
+      this.setOutput(true, 'Array');
+      this.setMutator(new Blockly.icons.MutatorIcon(['lists_create_with_list'], this));
+      this.setTooltip(Blockly.Msg.LISTS_CREATE_WITH_TOOLTIP);
+    };
+
+    // Override lists_create_with Lua generator to ensure correct order for table constructors
+    Blockly.Lua.forBlock['lists_create_with'] = function(block) {
+      const elements = new Array(block.itemCount_);
+      for (let i = 0; i < block.itemCount_; i++) {
+        elements[i] = Blockly.Lua.valueToCode(block, 'ADD' + i,
+            Blockly.Lua.ORDER_NONE) || 'nil';
+      }
+      const code = '{' + elements.join(', ') + '}';
+      return [code, Blockly.Lua.ORDER_ATOMIC]; // Explicitly return ORDER_ATOMIC
+    };
+
+
+    // Store original init functions
+    const originalListsGetIndexInit = Blockly.Blocks['lists_getIndex'].init;
+    const originalListsSetIndexInit = Blockly.Blocks['lists_setIndex'].init;
+
+    // Override lists_getIndex to allow any type for the index
+    Blockly.Blocks['lists_getIndex'].init = function() {
+      // Call the original init function first to set up all default properties
+      originalListsGetIndexInit.call(this);
+      // Then, override the check for the 'AT' input (index) to allow any type
+      if (this.getInput('AT')) {
+        this.getInput('AT').setCheck(null); // Allows any type (number, string, etc.)
+      }
+    };
+
+    // Override lists_setIndex to allow any type for the index
+    Blockly.Blocks['lists_setIndex'].init = function() {
+      // Call the original init function first to set up all default properties
+      originalListsSetIndexInit.call(this);
+      // Then, override the check for the 'AT' input (index) to allow any type
+      if (this.getInput('AT')) {
+        this.getInput('AT').setCheck(null); // Allows any type (number, string, etc.)
+      }
+    };
+
+
+    Blockly.Lua.forBlock['to_number'] = function(block){
+      const value = Blockly.Lua.valueToCode(block, 'number', Blockly.Lua.ORDER_NONE) || "0";
+      return [`tonumber(${value})`, Blockly.Lua.ORDER_HIGH];
+    }
+
+    Blockly.Lua.forBlock['to_string'] = function(block){
+      const value = Blockly.Lua.valueToCode(block, 'number', Blockly.Lua.ORDER_NONE) || "0";
+      return [`tostring(${value})`, Blockly.Lua.ORDER_HIGH];
+    }
+
+    Blockly.Lua.forBlock['text_concat'] = function(block) {
+      const a = Blockly.Lua.valueToCode(block, 'A', Blockly.Lua.ORDER_NONE) || '""';
+      const b = Blockly.Lua.valueToCode(block, 'B', Blockly.Lua.ORDER_NONE) || '""';
+      return [`${a} .. ${b}`, Blockly.Lua.ORDER_HIGH];
+    };
+
+    Blockly.Lua.forBlock['return'] = function(block){
+      const value = Blockly.Lua.valueToCode(block, 'A', Blockly.Lua.ORDER_NONE) || "";
+      return `return ${value}\n`;
+    }
+
+    Blockly.Blocks['lists_create_with_list'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField(Blockly.Msg.LISTS_CREATE_WITH_ITEM_TITLE || 'item');
+        this.setPreviousStatement(true);
+        this.setNextStatement(true);
+        this.setStyle('list_blocks');
+        this.setTooltip(Blockly.Msg.LISTS_CREATE_WITH_ITEM_TOOLTIP || 'An item in a list.');
+        this.setHelpUrl(Blockly.Msg.LISTS_CREATE_WITH_ITEM_HELPURL || '');
+      }
+    };
+
+    Blockly.Blocks['function_argument_item'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField('argument:')
+            .appendField(new Blockly.FieldTextInput('arg'), 'ARG_NAME');
+        this.setPreviousStatement(true);
+        this.setNextStatement(true);
+        this.setStyle('procedure_blocks');
+        this.setColour('#CC6680');
+        this.setTooltip('A function argument.');
+        this.setHelpUrl('');
+      }
+    };
+
+    // Block for defining a function (statement or expression)
+    Blockly.Blocks['function_definition_block'] = {
+      init: function() {
+        this.appendDummyInput('NAME_INPUT')
+            .appendField('function')
+            .appendField(new Blockly.FieldTextInput('my_function'), 'FUNCTION_NAME')
+            .appendField('(')
+            .appendField('', 'ARGS_TEXT') // Placeholder for argument names
+            .appendField(')');
+
+        this.appendStatementInput('DO')
+            .appendField('do');
+
+        this.setColour('#CC6680');
+        this.setTooltip('Define a function. Can be a statement or an expression.');
+        this.setHelpUrl('');
+
+        // Initial state
+        this.isExpression_ = false;
+        this.argumentCount_ = 0;
+        this.argumentNames_ = [];
+
+        // Mutator for arguments and expression toggle
+        this.setMutator(new Blockly.icons.MutatorIcon(['function_argument_item'], this));
+
+        // Update the block's shape based on initial state
+        this.updateShape_();
+      },
+
+      /**
+       * Create XML to represent the number of arguments and if it's an expression.
+       * @return {!Element} XML storage element.
+       * @this {Blockly.Block}
+       */
+      mutationToDom: function() {
+        const container = Blockly.utils.xml.createElement('mutation');
+        container.setAttribute('arguments', this.argumentCount_);
+        container.setAttribute('is_expression', this.isExpression_);
+        // Store argument names
+        for (let i = 0; i < this.argumentNames_.length; i++) {
+          container.setAttribute('arg' + i, this.argumentNames_[i]);
+        }
+        return container;
+      },
+
+      /**
+       * Parse XML to restore the number of arguments and expression state.
+       * @param {!Element} xmlElement XML storage element.
+       * @this {Blockly.Block}
+       */
+      domToMutation: function(xmlElement) {
+        this.argumentCount_ = parseInt(xmlElement.getAttribute('arguments'), 10) || 0;
+        this.isExpression_ = (xmlElement.getAttribute('is_expression') === 'true');
+        // Load argument names
+        this.argumentNames_ = [];
+        for (let i = 0; i < this.argumentCount_; i++) {
+          this.argumentNames_.push(xmlElement.getAttribute('arg' + i) || 'arg');
+        }
+        this.updateShape_();
+      },
+
+      /**
+       * Populate the mutator's dialog with this block's components.
+       * @param {!Blockly.Workspace} workspace The workspace to add blocks to.
+       * @return {!Blockly.Block} The container block for the mutator.
+       * @this {Blockly.Block}
+       */
+      decompose: function(workspace) {
+        const containerBlock = workspace.newBlock('procedures_mutatorcontainer');
+        containerBlock.initSvg();
+
+        // Add a checkbox to toggle expression vs. statement
+        containerBlock.appendDummyInput()
+            .appendField('is expression?')
+            .appendField(new Blockly.FieldCheckbox(this.isExpression_ ? 'TRUE' : 'FALSE'), 'IS_EXPRESSION');
+
+        let connection = containerBlock.getInput('STACK').connection;
+        for (let i = 0; i < this.argumentCount_; i++) {
+          const argBlock = workspace.newBlock('function_argument_item');
+          argBlock.initSvg();
+          if (this.argumentNames_ && this.argumentNames_[i]) {
+            argBlock.setFieldValue(this.argumentNames_[i], 'ARG_NAME');
+          }
+          connection.connect(argBlock.previousConnection);
+          connection = argBlock.nextConnection;
+        }
+        return containerBlock;
+      },
+
+      /**
+       * Reconfigure this block based on the mutator's dialog.
+       * @param {!Blockly.Block} containerBlock The container block.
+       * @this {Blockly.Block}
+       */
+      compose: function(containerBlock) {
+        // Update expression state
+        const newIsExpression = (containerBlock.getFieldValue('IS_EXPRESSION') === 'TRUE');
+        if (newIsExpression !== this.isExpression_) {
+          this.isExpression_ = newIsExpression;
+          this.updateShape_();
+        }
+
+        // Update arguments
+        const newArgumentNames = [];
+        let connection = containerBlock.getInput('STACK').connection;
+        let childBlock = connection.targetBlock();
+        while (childBlock) {
+          if (childBlock.type === 'function_argument_item') {
+            newArgumentNames.push(childBlock.getFieldValue('ARG_NAME'));
+          }
+          childBlock = childBlock.nextConnection && childBlock.nextConnection.targetBlock();
+        }
+
+        // Remove deleted arguments
+        for (let i = this.argumentCount_ - 1; i >= newArgumentNames.length; i--) {
+          this.removeInput('ARG' + i);
+        }
+        this.argumentCount_ = newArgumentNames.length;
+        this.argumentNames_ = newArgumentNames; // Store for updateShape_
+
+        // Add/update arguments
+        this.updateShape_(); // Call updateShape_ to add new arguments and update text
+      },
+
+      /**
+       * Update the block's shape (inputs/outputs) based on internal state.
+       * @private
+       * @this {Blockly.Block}
+       */
+      updateShape_: function() {
+        // Update output connection
+        if (this.isExpression_) {
+          if (!this.outputConnection) { // If no output, add one
+            this.setOutput(true, 'Function'); // Set output type to 'Function' or 'Any'
+          }
+        } else {
+          if (this.outputConnection) { // If has output, remove it
+            this.outputConnection.disconnect();
+            this.setOutput(false);
+          }
+        }
+
+        // Update argument inputs and text
+        const currentArgs = [];
+        for (let i = 0; i < this.argumentCount_; i++) {
+          const argName = this.argumentNames_ ? this.argumentNames_[i] : 'arg' + i;
+          currentArgs.push(argName);
+        }
+        this.getField('ARGS_TEXT').setValue(currentArgs.join(', '));
+      }
+    };
+
+    // New block for getting function arguments
+    Blockly.Blocks['function_argument_get'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField('get argument')
+            .appendField(new Blockly.FieldDropdown(this.getArguments), 'ARG_NAME');
+        this.setOutput(true, null); // This is an expression block
+        this.setColour('#CC6680'); // Match custom functions category
+        this.setTooltip('Gets the value of a function argument.');
+        this.setHelpUrl('');
+      },
+
+      /**
+       * Returns the available arguments from the parent function definition block.
+       * @this {Blockly.FieldDropdown}
+       * @return {!Array<!Array<string>>} Array of options for the dropdown.
+       */
+      getArguments: function() {
+        const options = [['(select argument)', '']]; // Default option
+        let currentBlock = this.sourceBlock_; // Start with the block that has the dropdown
+
+        // Loop upwards through parent blocks
+        while (currentBlock) {
+          // Check if the current block is the function definition block
+          if (currentBlock.type === 'function_definition_block' && currentBlock.argumentNames_) {
+            for (let i = 0; i < currentBlock.argumentNames_.length; i++) {
+              const argName = currentBlock.argumentNames_[i];
+              options.push([argName, argName]);
+            }
+            break; // Found the function definition, stop searching
+          }
+          // Move to the next parent block
+          currentBlock = currentBlock.getParent();
+        }
+        return options;
+      }
+    };
+
+
+    // --- Lua Generator for Custom Block ---
+
+    Blockly.Lua.forBlock['function_definition_block'] = function(block) {
+      const functionName = block.getFieldValue('FUNCTION_NAME');
+      const isExpression = block.isExpression_;
+      const argumentNames = [];
+      if (block.argumentNames_) {
+        for (let i = 0; i < block.argumentNames_.length; i++) {
+          argumentNames.push(block.argumentNames_[i]);
+        }
+      }
+      const argsString = argumentNames.join(', ');
+
+      const branch = Blockly.Lua.statementToCode(block, 'DO');
+      let code = '';
+
+      if (isExpression) {
+        code = `function(${argsString})\n${Blockly.Lua.INDENT}${branch}end`;
+        return [code, Blockly.Lua.ORDER_HIGH];
+      } else {
+        code = `local function ${functionName}(${argsString})\n${Blockly.Lua.INDENT}${branch}end\n`;
+        return code;
+      }
+    };
+
+    Blockly.Lua.forBlock['function_argument_get'] = function(block) {
+      const argumentName = block.getFieldValue('ARG_NAME');
+      return [argumentName, Blockly.Lua.ORDER_ATOMIC];
+    };
+
+
+    // --- Workspace Initialization ---
+
+    window.onload = function() {
+      workspace = Blockly.inject('blocklyDiv', {
+        toolbox: document.getElementById('toolbox'),
+        scrollbars: true,
+        pinch: true,
+        trashcan: true
+      });
+
+      const startBlock = workspace.newBlock('start_block');
+      startBlock.setDeletable(false);
+      startBlock.initSvg();
+      startBlock.render();
+      startBlock.moveBy(50, 50);
+
+      workspace.addChangeListener(function(event) {
+        if (event.is
+            && event.type !== Blockly.Events.UI
+            && event.type !== Blockly.Events.CLICK
+            && event.type !== Blockly.Events.TOOLBOX_ITEM_SELECT) {
+          generateLua();
+        }
+      });
+
+      generateLua();
+    };
 
     function generateLua() {
       try {
         Blockly.Lua.init(workspace);
-        const code = Blockly.Lua.blockToCode(startBlock);
+        const code = Blockly.Lua.workspaceToCode(workspace);
         document.getElementById('output').textContent = code;
+        document.getElementById('console').textContent = '';
       } catch (e) {
         document.getElementById('console').textContent = 'Error: ' + e.message;
+        console.error(e);
       }
     }
 
     window.onerror = function(msg, url, line, col, error) {
       document.getElementById('console').textContent = 'JS Error: ' + msg + ' at line ' + line;
+      console.error('JS Error:', msg, url, line, col, error);
     };
   </script>
 </body>
